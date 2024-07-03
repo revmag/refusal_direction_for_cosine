@@ -114,6 +114,137 @@ def filter_fn(refusal_score, steering_score, kl_div_score, layer, n_layer, kl_th
         return True
     return False
 
+def select_direction_2(
+    model_base: ModelBase,
+    harmful_instructions,
+    harmless_instructions,
+    candidate_directions: Float[Tensor, ' d_model'],
+    artifact_dir,
+    kl_threshold=0.1, # directions larger KL score are filtered out
+    induce_refusal_threshold=0.0, # directions with a lower inducing refusal score are filtered out
+    prune_layer_percentage=0.2, # discard the directions extracted from the last 20% of the model
+    batch_size=32
+):
+    if not os.path.exists(artifact_dir):
+        os.makedirs(artifact_dir)
+
+    d_model = candidate_directions.shape
+    n_layer = 18
+        
+    direction_to_add = candidate_directions
+
+    baseline_refusal_scores_harmful = get_refusal_scores(model_base.model, harmful_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks, fwd_hooks=[], batch_size=batch_size)
+    baseline_refusal_scores_harmless = get_refusal_scores(model_base.model, harmless_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks, fwd_hooks=[], batch_size=batch_size)
+
+    ablation_kl_div_scores = torch.zeros((1, n_layer), device=model_base.model.device, dtype=torch.float64)
+    ablation_refusal_scores = torch.zeros((1, n_layer), device=model_base.model.device, dtype=torch.float64)
+    steering_refusal_scores = torch.zeros((1, n_layer), device=model_base.model.device, dtype=torch.float64)
+
+
+    baseline_harmless_logits = get_last_position_logits(
+        model=model_base.model,
+        tokenizer=model_base.tokenizer,
+        instructions=harmless_instructions,
+        tokenize_instructions_fn=model_base.tokenize_instructions_fn,
+        fwd_pre_hooks=[],
+        fwd_hooks=[],
+        batch_size=batch_size
+    )
+
+    for source_pos in range(-1, 0):   
+        for source_layer in tqdm(range(n_layer), desc=f"Computing KL for source position {source_pos}"):
+
+            ablation_dir = direction_to_add
+            fwd_pre_hooks = [(model_base.model_block_modules[source_layer], get_direction_ablation_input_pre_hook(direction=ablation_dir))] 
+            fwd_hooks = [(model_base.model_attn_modules[source_layer], get_direction_ablation_output_hook(direction=ablation_dir))] 
+            fwd_hooks += [(model_base.model_mlp_modules[source_layer], get_direction_ablation_output_hook(direction=ablation_dir))] 
+            
+            intervention_logits: Float[Tensor, "n_instructions 1 d_vocab"] = get_last_position_logits(
+                model=model_base.model,
+                tokenizer=model_base.tokenizer,
+                instructions=harmless_instructions,
+                tokenize_instructions_fn=model_base.tokenize_instructions_fn,
+                fwd_pre_hooks=fwd_pre_hooks,
+                fwd_hooks=fwd_hooks,
+                batch_size=batch_size
+            )
+
+            ablation_kl_div_scores[source_pos, source_layer] = kl_div_fn(baseline_harmless_logits, intervention_logits, mask=None).mean(dim=0).item()
+
+    for source_pos in range(-1, 0):
+        for source_layer in tqdm(range(n_layer), desc=f"Computing refusal ablation for source position {source_pos}"):
+
+            ablation_dir = direction_to_add
+            fwd_pre_hooks = [(model_base.model_block_modules[source_layer], get_direction_ablation_input_pre_hook(direction=ablation_dir))] 
+            fwd_hooks = [(model_base.model_attn_modules[source_layer], get_direction_ablation_output_hook(direction=ablation_dir))] 
+            fwd_hooks += [(model_base.model_mlp_modules[source_layer], get_direction_ablation_output_hook(direction=ablation_dir))] 
+            
+            refusal_scores = get_refusal_scores(model_base.model, harmful_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks, fwd_pre_hooks=fwd_pre_hooks, fwd_hooks=fwd_hooks, batch_size=batch_size)
+            ablation_refusal_scores[source_pos, source_layer] = refusal_scores.mean().item()
+
+    for source_pos in range(-1, 0):
+        for source_layer in tqdm(range(n_layer), desc=f"Computing refusal addition for source position {source_pos}"):
+
+            refusal_vector = direction_to_add
+            coeff = torch.tensor(1.0)
+
+            fwd_pre_hooks = [(model_base.model_block_modules[source_layer], get_activation_addition_input_pre_hook(vector=refusal_vector, coeff=coeff))]
+            fwd_hooks = []
+
+            refusal_scores = get_refusal_scores(model_base.model, harmless_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks, fwd_pre_hooks=fwd_pre_hooks, fwd_hooks=fwd_hooks, batch_size=batch_size)
+            steering_refusal_scores[source_pos, source_layer] = refusal_scores.mean().item()
+
+    plot_refusal_scores(
+        refusal_scores=ablation_refusal_scores,
+        baseline_refusal_score=baseline_refusal_scores_harmful.mean().item(),
+        token_labels=model_base.tokenizer.batch_decode(model_base.eoi_toks),
+        title='Ablating direction on harmful instructions',
+        artifact_dir=artifact_dir,
+        artifact_name='ablation_scores'
+    )
+
+    plot_refusal_scores(
+        refusal_scores=steering_refusal_scores,
+        baseline_refusal_score=baseline_refusal_scores_harmless.mean().item(),
+        token_labels=model_base.tokenizer.batch_decode(model_base.eoi_toks),
+        title='Adding direction on harmless instructions',
+        artifact_dir=artifact_dir,
+        artifact_name='actadd_scores'
+    )
+
+    plot_refusal_scores(
+        refusal_scores=ablation_kl_div_scores,
+        baseline_refusal_score=0.0,
+        token_labels=model_base.tokenizer.batch_decode(model_base.eoi_toks),
+        title='KL Divergence when ablating direction on harmless instructions',
+        artifact_dir=artifact_dir,
+        artifact_name='kl_div_scores'
+    )
+
+    filtered_scores = []
+    json_output_all_scores = []
+    json_output_filtered_scores = []
+
+    for source_pos in range(-1, 0):
+        for source_layer in range(n_layer):
+
+            json_output_all_scores.append({
+                'position': source_pos,
+                'layer': source_layer,
+                'refusal_score': ablation_refusal_scores[source_pos, source_layer].item(),
+                'steering_score': steering_refusal_scores[source_pos, source_layer].item(),
+                'kl_div_score': ablation_kl_div_scores[source_pos, source_layer].item()
+            })
+
+            refusal_score = ablation_refusal_scores[source_pos, source_layer].item()
+            steering_score = steering_refusal_scores[source_pos, source_layer].item()
+            kl_div_score = ablation_kl_div_scores[source_pos, source_layer].item()
+
+    with open(f"{artifact_dir}/direction_evaluations.json", 'w') as f:
+        json.dump(json_output_all_scores, f, indent=4)
+
+    return -2, 10, direction_to_add
+
 def select_direction(
     model_base: ModelBase,
     harmful_instructions,
@@ -287,6 +418,9 @@ def select_direction(
     print(f"KL Divergence: {ablation_kl_div_scores[pos, layer]:.4f}")
     
     return pos, layer, candidate_directions[pos, layer]
+
+
+
 
 def masked_mean(seq, mask = None, dim = 1, keepdim = False):
     if mask is None:
