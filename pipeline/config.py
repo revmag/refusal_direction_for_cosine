@@ -9,7 +9,7 @@ class Config:
     model_alias: str
     model_path: str
     n_train: int = 128
-    n_test: int = 100
+    n_test: int = 5
     n_val: int = 32
     filter_train: bool = True
     filter_val: bool = True

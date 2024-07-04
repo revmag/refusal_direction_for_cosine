@@ -44,6 +44,8 @@ def get_mean_diff(model, tokenizer, harmful_instructions, harmless_instructions,
     mean_activations_harmless = get_mean_activations(model, tokenizer, harmless_instructions, tokenize_instructions_fn, block_modules, batch_size=batch_size, positions=positions)
 
     mean_diff: Float[Tensor, "n_positions n_layers d_model"] = mean_activations_harmful - mean_activations_harmless
+    # mean_diff: Float[Tensor, "n_positions n_layers d_model"] = mean_activations_harmful 
+
 
     return mean_diff
 
