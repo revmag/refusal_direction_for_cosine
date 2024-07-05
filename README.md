@@ -1,4 +1,5 @@
 # Refusal in Language Models Is Mediated by a Single Direction
+Refusal_metric isn't wokring, so checking it by looking at generations, this generates prompts on different layers by patching and ablation of refusal_dir from gemma-2b-it to gemma-2b
 
 **Content warning**: This repository contains text that is offensive, harmful, or otherwise inappropriate in nature.
 
