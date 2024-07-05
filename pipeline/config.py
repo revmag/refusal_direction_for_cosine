@@ -8,7 +8,7 @@ from typing import Tuple
 class Config:
     model_alias: str
     model_path: str
-    n_train: int = 128
+    n_train: int = 5
     n_test: int = 5
     n_val: int = 32
     filter_train: bool = True
