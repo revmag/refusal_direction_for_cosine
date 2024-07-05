@@ -1,4 +1,5 @@
 # Refusal in Language Models Is Mediated by a Single Direction
+This repo generates activations for n_train prompts, and then will see how cos with refusal dir fares
 
 **Content warning**: This repository contains text that is offensive, harmful, or otherwise inappropriate in nature.
 
