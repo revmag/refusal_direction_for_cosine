@@ -1,4 +1,5 @@
 # Refusal in Language Models Is Mediated by a Single Direction
+Initial experiment - just evaluating across differnt layers of gemma-2b by refusal from gemma-2b-it for plot of refusal_scores
 
 **Content warning**: This repository contains text that is offensive, harmful, or otherwise inappropriate in nature.
 
