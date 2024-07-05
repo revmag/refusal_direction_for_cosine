@@ -149,11 +149,15 @@ def generate_and_save_candidate_directions(
             artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"),
         )
 
+        target_dir = os.path.join(
+            cfg.artifact_path(), f"generate_directions_for_{i}_prompt"
+        )
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+
         torch.save(
             mean_diffs,
-            os.path.join(
-                cfg.artifact_path(), f"generate_directions_for_{i}_prompt/mean_diffs.pt"
-            ),
+            os.path.join(os.path.join(target_dir, f"mean_diffs_{i}.pt")),
         )
 
     return mean_diffs
