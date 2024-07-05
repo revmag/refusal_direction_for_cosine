@@ -141,17 +141,20 @@ def generate_and_save_candidate_directions(
     if not os.path.exists(os.path.join(cfg.artifact_path(), "generate_directions")):
         os.makedirs(os.path.join(cfg.artifact_path(), "generate_directions"))
 
-    mean_diffs = generate_directions(
-        model_base,
-        harmful_train,
-        harmless_train,
-        artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"),
-    )
+    for i in range(len(harmful_train)):
+        mean_diffs = generate_directions(
+            model_base,
+            harmful_train[i],
+            harmless_train[i],
+            artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"),
+        )
 
-    torch.save(
-        mean_diffs,
-        os.path.join(cfg.artifact_path(), "generate_directions/mean_diffs.pt"),
-    )
+        torch.save(
+            mean_diffs,
+            os.path.join(
+                cfg.artifact_path(), f"generate_directions_for_{i}_prompt/mean_diffs.pt"
+            ),
+        )
 
     return mean_diffs
 
@@ -301,9 +304,9 @@ def run_pipeline(model_path, directions=None):
     )
 
     # Filter datasets based on refusal scores
-    harmful_train, harmless_train, harmful_val, harmless_val = filter_data(
-        cfg, model_base, harmful_train, harmless_train, harmful_val, harmless_val
-    )
+    # harmful_train, harmless_train, harmful_val, harmless_val = filter_data(
+    #     cfg, model_base, harmful_train, harmless_train, harmful_val, harmless_val
+    # )
 
     # 1. Generate candidate refusal directions
     candidate_directions = generate_and_save_candidate_directions(
@@ -312,81 +315,81 @@ def run_pipeline(model_path, directions=None):
 
     # 2. Select the most effective refusal direction
 
-    if directions is not None:
-        pos, layer, direction = select_and_save_direction_2(
-            cfg, model_base, harmful_val, harmless_val, directions
-        )
-    else:
-        pos, layer, direction = select_and_save_direction(
-            cfg, model_base, harmful_val, harmless_val, candidate_directions
-        )
+    # if directions is not None:
+    #     pos, layer, direction = select_and_save_direction_2(
+    #         cfg, model_base, harmful_val, harmless_val, directions
+    #     )
+    # else:
+    #     pos, layer, direction = select_and_save_direction(
+    #         cfg, model_base, harmful_val, harmless_val, candidate_directions
+    #     )
 
-    for layer in range(model_base.model.config.num_hidden_layers):
-        # baseline_fwd_pre_hooks, baseline_fwd_hooks = [], []
-        ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
-            model_base, direction, layer
-        )
-        actadd_fwd_pre_hooks, actadd_fwd_hooks = (
-            [
-                (
-                    model_base.model_block_modules[layer],
-                    get_activation_addition_input_pre_hook(
-                        vector=direction, coeff=-1.0
-                    ),
-                )
-            ],
-            [],
-        )
+    # for layer in range(model_base.model.config.num_hidden_layers):
+    #     # baseline_fwd_pre_hooks, baseline_fwd_hooks = [], []
+    #     ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
+    #         model_base, direction, layer
+    #     )
+    #     actadd_fwd_pre_hooks, actadd_fwd_hooks = (
+    #         [
+    #             (
+    #                 model_base.model_block_modules[layer],
+    #                 get_activation_addition_input_pre_hook(
+    #                     vector=direction, coeff=-1.0
+    #                 ),
+    #             )
+    #         ],
+    #         [],
+    #     )
 
-        # 3a. Generate and save completions on harmful evaluation datasets
-        harmful_dataset_name = cfg.evaluation_datasets
+    #     # 3a. Generate and save completions on harmful evaluation datasets
+    #     harmful_dataset_name = cfg.evaluation_datasets[0]
 
-        harmful_test = random.sample(load_dataset(harmful_dataset_name), cfg.n_test)
-        # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', dataset_name)
-        generate_and_save_completions_for_dataset(
-            cfg,
-            model_base,
-            ablation_fwd_pre_hooks,
-            ablation_fwd_hooks,
-            f"ablation_{layer}",
-            harmful_dataset_name,
-            harmful_test,
-        )
-        generate_and_save_completions_for_dataset(
-            cfg,
-            model_base,
-            actadd_fwd_pre_hooks,
-            actadd_fwd_hooks,
-            f"actadd_{layer}",
-            harmful_dataset_name,
-            harmful_test,
-        )
-        # 4a. Generate and save completions on harmless evaluation dataset
-        harmless_test = random.sample(
-            load_dataset_split(harmtype="harmless", split="test"), cfg.n_test
-        )
-        # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', 'harmless', dataset=harmless_test)
+    #     harmful_test = random.sample(load_dataset(harmful_dataset_name), cfg.n_test)
+    #     # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', dataset_name)
+    #     generate_and_save_completions_for_dataset(
+    #         cfg,
+    #         model_base,
+    #         ablation_fwd_pre_hooks,
+    #         ablation_fwd_hooks,
+    #         f"ablation_{layer}",
+    #         harmful_dataset_name,
+    #         harmful_test,
+    #     )
+    #     generate_and_save_completions_for_dataset(
+    #         cfg,
+    #         model_base,
+    #         actadd_fwd_pre_hooks,
+    #         actadd_fwd_hooks,
+    #         f"actadd_{layer}",
+    #         harmful_dataset_name,
+    #         harmful_test,
+    #     )
+    #     # 4a. Generate and save completions on harmless evaluation dataset
+    #     harmless_test = random.sample(
+    #         load_dataset_split(harmtype="harmless", split="test"), cfg.n_test
+    #     )
+    #     # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', 'harmless', dataset=harmless_test)
 
-        actadd_refusal_pre_hooks, actadd_refusal_hooks = (
-            [
-                (
-                    model_base.model_block_modules[layer],
-                    get_activation_addition_input_pre_hook(
-                        vector=direction, coeff=+1.0
-                    ),
-                )
-            ],
-            [],
-        )
-        generate_and_save_completions_for_dataset(
-            cfg,
-            model_base,
-            actadd_refusal_pre_hooks,
-            actadd_refusal_hooks,
-            f"actadd_{layer}",
-            "harmless",
-            dataset=harmless_test,
-        )
+    #     actadd_refusal_pre_hooks, actadd_refusal_hooks = (
+    #         [
+    #             (
+    #                 model_base.model_block_modules[layer],
+    #                 get_activation_addition_input_pre_hook(
+    #                     vector=direction, coeff=+1.0
+    #                 ),
+    #             )
+    #         ],
+    #         [],
+    #     )
+    #     generate_and_save_completions_for_dataset(
+    #         cfg,
+    #         model_base,
+    #         actadd_refusal_pre_hooks,
+    #         actadd_refusal_hooks,
+    #         f"actadd_{layer}",
+    #         "harmless",
+    #         dataset=harmless_test,
+    #     )
 
     # # 4b. Evaluate completions and save results on harmless evaluation dataset
     # evaluate_completions_and_save_results_for_dataset(cfg, 'baseline', 'harmless', eval_methodologies=cfg.refusal_eval_methodologies)
