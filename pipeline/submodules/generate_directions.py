@@ -28,14 +28,23 @@ def get_mean_activations(model, tokenizer, instructions, tokenize_instructions_f
 
     fwd_pre_hooks = [(block_modules[layer], get_mean_activations_pre_hook(layer=layer, cache=mean_activations, n_samples=n_samples, positions=positions)) for layer in range(n_layers)]
 
-    for i in tqdm(range(0, len(instructions), batch_size)):
-        inputs = tokenize_instructions_fn(instructions=instructions[i:i+batch_size])
+    # for i in tqdm(range(0, len(instructions), batch_size)):
+    #     inputs = tokenize_instructions_fn(instructions=instructions[i:i+batch_size])
 
-        with add_hooks(module_forward_pre_hooks=fwd_pre_hooks, module_forward_hooks=[]):
-            model(
-                input_ids=inputs.input_ids.to(model.device),
-                attention_mask=inputs.attention_mask.to(model.device),
-            )
+    #     with add_hooks(module_forward_pre_hooks=fwd_pre_hooks, module_forward_hooks=[]):
+    #         model(
+    #             input_ids=inputs.input_ids.to(model.device),
+    #             attention_mask=inputs.attention_mask.to(model.device),
+    #         )
+
+    inputs = tokenize_instructions_fn(instructions=[instructions])
+
+    with add_hooks(module_forward_pre_hooks=fwd_pre_hooks, module_forward_hooks=[]):
+        model(
+            input_ids=inputs.input_ids.to(model.device),
+            attention_mask=inputs.attention_mask.to(model.device),
+        )
+
 
     return mean_activations
 
@@ -43,8 +52,8 @@ def get_mean_diff(model, tokenizer, harmful_instructions, harmless_instructions,
     mean_activations_harmful = get_mean_activations(model, tokenizer, harmful_instructions, tokenize_instructions_fn, block_modules, batch_size=batch_size, positions=positions)
     mean_activations_harmless = get_mean_activations(model, tokenizer, harmless_instructions, tokenize_instructions_fn, block_modules, batch_size=batch_size, positions=positions)
 
-    mean_diff: Float[Tensor, "n_positions n_layers d_model"] = mean_activations_harmful - mean_activations_harmless
-    # mean_diff: Float[Tensor, "n_positions n_layers d_model"] = mean_activations_harmful 
+    # mean_diff: Float[Tensor, "n_positions n_layers d_model"] = mean_activations_harmful - mean_activations_harmless
+    mean_diff: Float[Tensor, "n_positions n_layers d_model"] = mean_activations_harmful 
 
 
     return mean_diff
@@ -58,6 +67,6 @@ def generate_directions(model_base: ModelBase, harmful_instructions, harmless_in
     assert mean_diffs.shape == (len(model_base.eoi_toks), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
     assert not mean_diffs.isnan().any()
 
-    torch.save(mean_diffs, f"{artifact_dir}/mean_diffs.pt")
+    # torch.save(mean_diffs, f"{artifact_dir}/mean_diffs.pt")
 
     return mean_diffs
