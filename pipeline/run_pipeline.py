@@ -339,7 +339,7 @@ def run_pipeline(model_path, directions=None):
         )
 
         # 3a. Generate and save completions on harmful evaluation datasets
-        harmful_dataset_name = cfg.evaluation_datasets
+        harmful_dataset_name = cfg.evaluation_datasets[0]
 
         harmful_test = random.sample(load_dataset(harmful_dataset_name), cfg.n_test)
         # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', dataset_name)
