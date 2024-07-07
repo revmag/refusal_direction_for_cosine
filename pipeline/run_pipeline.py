@@ -320,9 +320,16 @@ def run_pipeline(model_path, directions=None):
         pos, layer, direction = select_and_save_direction(
             cfg, model_base, harmful_val, harmless_val, candidate_directions
         )
-
+    baseline_fwd_pre_hooks, baseline_fwd_hooks = [], []
+    harmful_dataset_name = cfg.evaluation_datasets[0]
+    harmful_test = random.sample(load_dataset(harmful_dataset_name), cfg.n_test)
+    generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', dataset_name)
+    harmless_test = random.sample(
+            load_dataset_split(harmtype="harmless", split="test"), cfg.n_test
+        )
+    generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', 'harmless', dataset=harmless_test)
+    
     for layer in range(model_base.model.config.num_hidden_layers):
-        # baseline_fwd_pre_hooks, baseline_fwd_hooks = [], []
         ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
             model_base, direction, layer
         )
@@ -337,12 +344,7 @@ def run_pipeline(model_path, directions=None):
             ],
             [],
         )
-
         # 3a. Generate and save completions on harmful evaluation datasets
-        harmful_dataset_name = cfg.evaluation_datasets[0]
-
-        harmful_test = random.sample(load_dataset(harmful_dataset_name), cfg.n_test)
-        # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', dataset_name)
         generate_and_save_completions_for_dataset(
             cfg,
             model_base,
@@ -362,11 +364,7 @@ def run_pipeline(model_path, directions=None):
             harmful_test,
         )
         # 4a. Generate and save completions on harmless evaluation dataset
-        harmless_test = random.sample(
-            load_dataset_split(harmtype="harmless", split="test"), cfg.n_test
-        )
-        # generate_and_save_completions_for_dataset(cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, 'baseline', 'harmless', dataset=harmless_test)
-
+        
         actadd_refusal_pre_hooks, actadd_refusal_hooks = (
             [
                 (
