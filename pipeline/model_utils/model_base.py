@@ -65,7 +65,7 @@ class ModelBase(ABC):
         pass
 
     def generate_completions(self, dataset, fwd_pre_hooks=[], fwd_hooks=[], batch_size=8, max_new_tokens=64):
-        generation_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False)
+        generation_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=True,temperature=0.5)
         generation_config.pad_token_id = self.tokenizer.pad_token_id
 
         completions = []
