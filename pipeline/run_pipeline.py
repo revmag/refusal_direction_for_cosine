@@ -167,26 +167,21 @@ def generate_and_save_candidate_directions(
 
 def generate_and_save_activations(cfg, model_base, harmful_train, harmless_train):
     """Generate and save candidate directions."""
-    if not os.path.exists(os.path.join(cfg.artifact_path(), "generate_directions")):
-        os.makedirs(os.path.join(cfg.artifact_path(), "generate_directions"))
+    activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(activations_dir):
+        os.makedirs(activations_dir)
 
     for i in range(len(harmful_train)):
         mean_activations = generate_activations_for_harmful(
             model_base,
             harmful_train[i],
-            artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"),
         )
 
-        target_dir = os.path.join(
-            cfg.artifact_path(), f"generate_activations_for_{i}_prompt"
-        )
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
+        file_path = os.path.join(activations_dir, f"mean_activations_for_{i}_prompt.pt")
 
-        torch.save(
-            mean_activations,
-            os.path.join(os.path.join(target_dir, f"mean_activations_{i}.pt")),
-        )
+        torch.save(mean_activations, file_path)
 
 
 def select_and_save_direction(
