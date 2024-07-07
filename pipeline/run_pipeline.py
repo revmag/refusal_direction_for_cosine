@@ -13,7 +13,10 @@ from pipeline.utils.hook_utils import (
     get_all_direction_ablation_hooks,
 )
 
-from pipeline.submodules.generate_directions import generate_directions
+from pipeline.submodules.generate_directions import (
+    generate_directions,
+    generate_activations_for_harmful,
+)
 from pipeline.submodules.select_direction import (
     select_direction,
     get_refusal_scores,
@@ -63,19 +66,19 @@ def load_and_sample_datasets(cfg):
     random.seed(42)
     harmful_train = random.sample(
         load_dataset_split(harmtype="harmful", split="train", instructions_only=True),
-        cfg.n_train,
+        cfg.n_train_for_activations,
     )
     harmless_train = random.sample(
         load_dataset_split(harmtype="harmless", split="train", instructions_only=True),
-        cfg.n_train,
+        cfg.n_train_for_activations,
     )
     harmful_val = random.sample(
         load_dataset_split(harmtype="harmful", split="val", instructions_only=True),
-        cfg.n_val,
+        cfg.n_val_for_activations,
     )
     harmless_val = random.sample(
         load_dataset_split(harmtype="harmless", split="val", instructions_only=True),
-        cfg.n_val,
+        cfg.n_val_for_activations,
     )
     return harmful_train, harmless_train, harmful_val, harmless_val
 
@@ -160,6 +163,30 @@ def generate_and_save_candidate_directions(
     )
 
     return mean_diffs
+
+
+def generate_and_save_activations(cfg, model_base, harmful_train, harmless_train):
+    """Generate and save candidate directions."""
+    if not os.path.exists(os.path.join(cfg.artifact_path(), "generate_directions")):
+        os.makedirs(os.path.join(cfg.artifact_path(), "generate_directions"))
+
+    for i in range(len(harmful_train)):
+        mean_activations = generate_activations_for_harmful(
+            model_base,
+            harmful_train[i],
+            artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"),
+        )
+
+        target_dir = os.path.join(
+            cfg.artifact_path(), f"generate_activations_for_{i}_prompt"
+        )
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+
+        torch.save(
+            mean_activations,
+            os.path.join(os.path.join(target_dir, f"mean_activations_{i}.pt")),
+        )
 
 
 def select_and_save_direction(
@@ -306,9 +333,9 @@ def run_pipeline(model_path, directions=None, activation_prompts=False):
         harmful_train, harmless_train, harmful_val, harmless_val = (
             load_and_sample_datasets(cfg)
         )
-        candidate_directions = generate_and_save_candidate_directions(
-            cfg, model_base, harmful_train, harmless_train
-        )
+        generate_and_save_activations(cfg, model_base, harmful_train, harmless_train)
+
+        print("Loaded activations for each layer")
 
     # Load and sample datasets
     harmful_train, harmless_train, harmful_val, harmless_val = load_and_sample_datasets(
