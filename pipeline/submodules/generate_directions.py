@@ -201,12 +201,7 @@ def get_activation_for_harmful(
     return mean_diff
 
 
-def generate_activations_for_harmful(
-    model_base: ModelBase, harmful_instructions, artifact_dir
-):
-    if not os.path.exists(artifact_dir):
-        os.makedirs(artifact_dir)
-
+def generate_activations_for_harmful(model_base: ModelBase, harmful_instructions):
     mean_activations = get_activation_for_harmful(
         model_base.model,
         model_base.tokenizer,
