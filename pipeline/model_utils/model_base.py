@@ -79,6 +79,7 @@ class ModelBase(ABC):
         generation_config = GenerationConfig(
             max_new_tokens=max_new_tokens, do_sample=True, temperature=temperature
         )
+        print("producing for temperature",temperature)
 
         generation_config.pad_token_id = self.tokenizer.pad_token_id
 
