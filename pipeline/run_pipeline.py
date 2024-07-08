@@ -212,7 +212,7 @@ def computing_dot_product(
     for i in range(layers):
         # Calculate average dot products
         dot_products = sum(
-            np.dot(data_list[j][i].numpy(), refusal_direction.numpy())
+            np.dot(data_list[j][i].cpu().numpy(), refusal_direction.cpu().numpy())
             for j in range(len(harmful_train))
         ) / len(harmful_train)
         average_dot_products.append(dot_products)
@@ -220,7 +220,9 @@ def computing_dot_product(
         # Calculate resultant dot products
         resultant_vector = sum(data_list[j][i] for j in range(len(harmful_train)))
         resultant_vector = normalize_vector(resultant_vector)
-        dot_product = np.dot(resultant_vector.numpy(), refusal_direction.numpy())
+        dot_product = np.dot(
+            resultant_vector.cpu().numpy(), refusal_direction.cpu().numpy()
+        )
         resultant_dot_products.append(dot_product)
 
     print("Average Dot Products:", average_dot_products)
