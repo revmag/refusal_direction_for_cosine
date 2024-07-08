@@ -59,7 +59,7 @@ def load_directions(file_path):
     return torch.load(file_path, map_location=torch.device("cpu"))
 
 
-def load_and_sample_datasets(cfg):
+def load_and_sample_datasets_for_activations(cfg):
     """
     Load datasets and sample them based on the configuration.
 
@@ -82,6 +82,32 @@ def load_and_sample_datasets(cfg):
     harmless_val = random.sample(
         load_dataset_split(harmtype="harmless", split="val", instructions_only=True),
         cfg.n_val_for_activations,
+    )
+    return harmful_train, harmless_train, harmful_val, harmless_val
+
+def load_and_sample_datasets(cfg):
+    """
+    Load datasets and sample them based on the configuration.
+
+    Returns:
+        Tuple of datasets: (harmful_train, harmless_train, harmful_val, harmless_val)
+    """
+    random.seed(42)
+    harmful_train = random.sample(
+        load_dataset_split(harmtype="harmful", split="train", instructions_only=True),
+        cfg.n_train,
+    )
+    harmless_train = random.sample(
+        load_dataset_split(harmtype="harmless", split="train", instructions_only=True),
+        cfg.n_train,
+    )
+    harmful_val = random.sample(
+        load_dataset_split(harmtype="harmful", split="val", instructions_only=True),
+        cfg.n_val,
+    )
+    harmless_val = random.sample(
+        load_dataset_split(harmtype="harmless", split="val", instructions_only=True),
+        cfg.n_val,
     )
     return harmful_train, harmless_train, harmful_val, harmless_val
 
@@ -209,6 +235,8 @@ def computing_dot_product(
     layers,
     harmful_train,
 ):
+    data_list = [normalize_vector(data) for data in data_list]
+
     """Calculate and save dot products, then generate and save a DataFrame with results."""
     for i in range(layers):
         # Calculate average dot products
@@ -442,7 +470,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False):
     # To get activations of each layer
     if activation_prompts:
         harmful_train, harmless_train, harmful_val, harmless_val = (
-            load_and_sample_datasets(cfg)
+            load_and_sample_datasets_for_activations(cfg)
         )
         generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction)
         print("Loaded activations for each layer")
