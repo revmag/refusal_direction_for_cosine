@@ -179,6 +179,7 @@ def normalize_vector(vector):
 def plotting_refusal_with_activations(
     layers, average_dot_products, resultant_dot_products, activations_dir
 ):
+    layers=range(layers)
     plt.figure(figsize=(10, 5))  # Set the figure size as needed
 
     # Plotting Average Dot Products
@@ -230,7 +231,7 @@ def computing_dot_product(
 
     # Create and display a DataFrame with results
     data = {
-        "Layer": list(layers),
+        "Layer": list(range(layers)),
         "Sum along cos(A_i, R)": average_dot_products,
         "Cos(resultant(A_i), R)": resultant_dot_products,
     }
