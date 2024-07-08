@@ -3,6 +3,9 @@ import random
 import json
 import os
 import argparse
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 from dataset.load_dataset import load_dataset_split, load_dataset
 
@@ -165,7 +168,95 @@ def generate_and_save_candidate_directions(
     return mean_diffs
 
 
-def generate_and_save_activations(cfg, model_base, harmful_train, harmless_train):
+def normalize_vector(vector):
+    """Normalize a given vector to have unit length."""
+    norm = np.linalg.norm(vector)
+    if norm == 0:
+        return vector
+    return vector / norm
+
+
+def plotting_refusal_with_activations(
+    layers, average_dot_products, resultant_dot_products, activations_dir
+):
+    plt.figure(figsize=(10, 5))  # Set the figure size as needed
+
+    # Plotting Average Dot Products
+    plt.plot(layers, average_dot_products, label="Average Dot Product", marker="o")
+
+    # Plotting Resultant Dot Products
+    plt.plot(layers, resultant_dot_products, label="Resultant Dot Product", marker="o")
+
+    plt.title("Dot Products Comparison Across Layers")  # Title of the plot
+    plt.xlabel("Layer Number")  # Label for the x-axis
+    plt.ylabel("Dot Product Value")  # Label for the y-axis
+    plt.xticks(layers)  # Ensure all layer numbers are marked
+    plt.legend()
+
+    plot_file_path = os.path.join(activations_dir, "dot_products_plot.png")
+    plt.savefig(plot_file_path)
+    plt.close()
+    print(f"Plot saved to {plot_file_path}")
+
+
+def computing_dot_product(
+    data_list,
+    refusal_direction,
+    average_dot_products,
+    resultant_dot_products,
+    activations_dir,
+    layers,
+    harmful_train,
+):
+    """Calculate and save dot products, then generate and save a DataFrame with results."""
+    for i in range(layers):
+        # Calculate average dot products
+        dot_products = sum(
+            np.dot(data_list[j][i].numpy(), refusal_direction.numpy())
+            for j in range(len(harmful_train))
+        ) / len(harmful_train)
+        average_dot_products.append(dot_products)
+
+        # Calculate resultant dot products
+        resultant_vector = sum(data_list[j][i] for j in range(len(harmful_train)))
+        resultant_vector = normalize_vector(resultant_vector)
+        dot_product = np.dot(resultant_vector.numpy(), refusal_direction.numpy())
+        resultant_dot_products.append(dot_product)
+
+    print("Average Dot Products:", average_dot_products)
+    print("Resultant Dot Products:", resultant_dot_products)
+
+    # Create and display a DataFrame with results
+    data = {
+        "Layer": list(layers),
+        "Sum along cos(A_i, R)": average_dot_products,
+        "Cos(resultant(A_i), R)": resultant_dot_products,
+    }
+    df = pd.DataFrame(data)
+
+    # Save average_dot_products
+    average_activation_file_path = os.path.join(
+        activations_dir, "average_dot_products.npy"
+    )
+    np.save(average_activation_file_path, average_dot_products)
+
+    # Save resultant_dot_products
+    resultant_activation_file_path = os.path.join(
+        activations_dir, "resultant_dot_products.npy"
+    )
+    np.save(resultant_activation_file_path, resultant_dot_products)
+
+    # Save DataFrame as CSV
+    df_file_path = os.path.join(activations_dir, "cosine_similarity_results.csv")
+    df.to_csv(df_file_path, index=False)
+
+    print("Data saved successfully.")
+    print(df)
+
+    return average_dot_products, resultant_dot_products
+
+
+def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction):
     """Generate and save candidate directions."""
     activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
 
@@ -173,15 +264,37 @@ def generate_and_save_activations(cfg, model_base, harmful_train, harmless_train
     if not os.path.exists(activations_dir):
         os.makedirs(activations_dir)
 
+    # for storing cos with refusal_direction
+    data_list = []
+
     for i in range(len(harmful_train)):
         mean_activations = generate_activations_for_harmful(
             model_base,
             harmful_train[i],
         )
-
         file_path = os.path.join(activations_dir, f"mean_activations_for_{i}_prompt.pt")
 
+        # mean activations has a size of 5*18*d_model -> it takes activations of last 5 positions of prompt
+        data_list.append(mean_activations[4, :, :])
         torch.save(mean_activations, file_path)
+
+    refusal_direction = normalize_vector(refusal_direction)
+    average_dot_products = []
+    resultant_dot_products = []
+    layers = model_base.model.config.num_hidden_layers
+
+    average_dot_products, resultant_dot_products = computing_dot_product(
+        data_list,
+        refusal_direction,
+        average_dot_products,
+        resultant_dot_products,
+        activations_dir,
+        layers,
+        harmful_train,
+    )
+    plotting_refusal_with_activations(
+        layers, average_dot_products, resultant_dot_products, activations_dir
+    )
 
 
 def select_and_save_direction(
@@ -298,7 +411,7 @@ def evaluate_loss_for_datasets(
         os.makedirs(os.path.join(cfg.artifact_path(), "loss_evals"))
 
     on_distribution_completions_file_path = os.path.join(
-        cfg.artifact_path(), f"completions/harmless_baseline_completions.json"
+        cfg.artifact_path(), "completions/harmless_baseline_completions.json"
     )
 
     loss_evals = evaluate_loss(
@@ -316,7 +429,7 @@ def evaluate_loss_for_datasets(
         json.dump(loss_evals, f, indent=4)
 
 
-def run_pipeline(model_path, directions=None, activation_prompts=False):
+def run_pipeline(model_path, refusal_direction=None, activation_prompts=False):
     """Run the full pipeline."""
     model_alias = os.path.basename(model_path)
     cfg = Config(model_alias=model_alias, model_path=model_path)
@@ -328,8 +441,7 @@ def run_pipeline(model_path, directions=None, activation_prompts=False):
         harmful_train, harmless_train, harmful_val, harmless_val = (
             load_and_sample_datasets(cfg)
         )
-        generate_and_save_activations(cfg, model_base, harmful_train, harmless_train)
-
+        generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction)
         print("Loaded activations for each layer")
 
     # Load and sample datasets
@@ -349,9 +461,9 @@ def run_pipeline(model_path, directions=None, activation_prompts=False):
 
     # 2. Select the most effective refusal direction
 
-    if directions is not None:
+    if refusal_direction is not None:
         pos, layer, direction = select_and_save_direction_2(
-            cfg, model_base, harmful_val, harmless_val, directions
+            cfg, model_base, harmful_val, harmless_val, refusal_direction
         )
     else:
         pos, layer, direction = select_and_save_direction(
@@ -366,7 +478,9 @@ def run_pipeline(model_path, directions=None, activation_prompts=False):
         [
             (
                 model_base.model_block_modules[layer],
-                get_activation_addition_input_pre_hook(vector=direction, coeff=-1.0),
+                get_activation_addition_input_pre_hook(
+                    vector=refusal_direction, coeff=-1.0
+                ),
             )
         ],
         [],
@@ -439,7 +553,9 @@ def run_pipeline(model_path, directions=None, activation_prompts=False):
         [
             (
                 model_base.model_block_modules[layer],
-                get_activation_addition_input_pre_hook(vector=direction, coeff=+1.0),
+                get_activation_addition_input_pre_hook(
+                    vector=refusal_direction, coeff=+1.0
+                ),
             )
         ],
         [],
@@ -483,6 +599,6 @@ if __name__ == "__main__":
     directions = load_directions(args.direction_file) if args.direction_file else None
     run_pipeline(
         model_path=args.model_path,
-        directions=directions,
+        refusal_direction=directions,
         activation_prompts=args.activation_prompts,
     )
