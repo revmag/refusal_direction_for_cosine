@@ -50,6 +50,13 @@ def parse_arguments():
         action="store_true",
         help="Activate prompts if this flag is set",
     )
+    parser.add_argument(
+        "--set_temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for text generation (default: 1.0)",
+        nargs="?",
+    )
 
     return parser.parse_args()
 
@@ -84,6 +91,7 @@ def load_and_sample_datasets_for_activations(cfg):
         cfg.n_val_for_activations,
     )
     return harmful_train, harmless_train, harmful_val, harmless_val
+
 
 def load_and_sample_datasets(cfg):
     """
@@ -205,7 +213,7 @@ def normalize_vector(vector):
 def plotting_refusal_with_activations(
     layers, average_dot_products, resultant_dot_products, activations_dir
 ):
-    layers=range(layers)
+    layers = range(layers)
     plt.figure(figsize=(10, 5))  # Set the figure size as needed
 
     # Plotting Average Dot Products
@@ -381,6 +389,7 @@ def generate_and_save_completions_for_dataset(
     fwd_hooks,
     intervention_label,
     dataset_name,
+    temperature=1.0,
     dataset=None,
 ):
     """Generate and save completions for a dataset."""
@@ -395,6 +404,7 @@ def generate_and_save_completions_for_dataset(
         fwd_pre_hooks=fwd_pre_hooks,
         fwd_hooks=fwd_hooks,
         max_new_tokens=cfg.max_new_tokens,
+        temperature=temperature,
     )
 
     with open(
@@ -460,7 +470,9 @@ def evaluate_loss_for_datasets(
         json.dump(loss_evals, f, indent=4)
 
 
-def run_pipeline(model_path, refusal_direction=None, activation_prompts=False):
+def run_pipeline(
+    model_path, refusal_direction=None, activation_prompts=False, temperature=1.0
+):
     """Run the full pipeline."""
     model_alias = os.path.basename(model_path)
     cfg = Config(model_alias=model_alias, model_path=model_path)
@@ -502,74 +514,26 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False):
         )
 
     baseline_fwd_pre_hooks, baseline_fwd_hooks = [], []
-    ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
-        model_base, direction
+    harmful_dataset_name = cfg.evaluation_datasets[0]
+
+    harmful_test = random.sample(
+        load_dataset(harmful_dataset_name), cfg.n_train_for_activations
     )
-    actadd_fwd_pre_hooks, actadd_fwd_hooks = (
-        [
-            (
-                model_base.model_block_modules[layer],
-                get_activation_addition_input_pre_hook(
-                    vector=refusal_direction, coeff=-1.0
-                ),
-            )
-        ],
-        [],
+    generate_and_save_completions_for_dataset(
+        cfg,
+        model_base,
+        baseline_fwd_pre_hooks,
+        baseline_fwd_hooks,
+        "baseline",
+        harmful_dataset_name,
+        temperature,
+        dataset=harmful_test,
     )
 
-    # 3a. Generate and save completions on harmful evaluation datasets
-    for dataset_name in cfg.evaluation_datasets:
-        generate_and_save_completions_for_dataset(
-            cfg,
-            model_base,
-            baseline_fwd_pre_hooks,
-            baseline_fwd_hooks,
-            "baseline",
-            dataset_name,
-        )
-        generate_and_save_completions_for_dataset(
-            cfg,
-            model_base,
-            ablation_fwd_pre_hooks,
-            ablation_fwd_hooks,
-            "ablation",
-            dataset_name,
-        )
-        generate_and_save_completions_for_dataset(
-            cfg,
-            model_base,
-            actadd_fwd_pre_hooks,
-            actadd_fwd_hooks,
-            "actadd",
-            dataset_name,
-        )
-
-    # 3b. Evaluate completions and save results on harmful evaluation datasets
-    for dataset_name in cfg.evaluation_datasets:
-        evaluate_completions_and_save_results_for_dataset(
-            cfg,
-            "baseline",
-            dataset_name,
-            eval_methodologies=cfg.jailbreak_eval_methodologies,
-        )
-        evaluate_completions_and_save_results_for_dataset(
-            cfg,
-            "ablation",
-            dataset_name,
-            eval_methodologies=cfg.jailbreak_eval_methodologies,
-        )
-        evaluate_completions_and_save_results_for_dataset(
-            cfg,
-            "actadd",
-            dataset_name,
-            eval_methodologies=cfg.jailbreak_eval_methodologies,
-        )
-
-    # 4a. Generate and save completions on harmless evaluation dataset
     harmless_test = random.sample(
-        load_dataset_split(harmtype="harmless", split="test"), cfg.n_test
+        load_dataset_split(harmtype="harmless", split="test"),
+        cfg.n_train_for_activations,
     )
-
     generate_and_save_completions_for_dataset(
         cfg,
         model_base,
@@ -577,53 +541,72 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False):
         baseline_fwd_hooks,
         "baseline",
         "harmless",
+        temperature,
         dataset=harmless_test,
     )
 
-    actadd_refusal_pre_hooks, actadd_refusal_hooks = (
-        [
-            (
-                model_base.model_block_modules[layer],
-                get_activation_addition_input_pre_hook(
-                    vector=refusal_direction, coeff=+1.0
-                ),
-            )
-        ],
-        [],
-    )
-    generate_and_save_completions_for_dataset(
-        cfg,
-        model_base,
-        actadd_refusal_pre_hooks,
-        actadd_refusal_hooks,
-        "actadd",
-        "harmless",
-        dataset=harmless_test,
-    )
+    for layer in range(model_base.model.config.num_hidden_layers):
+        ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
+            model_base, direction
+        )
 
-    # 4b. Evaluate completions and save results on harmless evaluation dataset
-    evaluate_completions_and_save_results_for_dataset(
-        cfg, "baseline", "harmless", eval_methodologies=cfg.refusal_eval_methodologies
-    )
-    evaluate_completions_and_save_results_for_dataset(
-        cfg, "actadd", "harmless", eval_methodologies=cfg.refusal_eval_methodologies
-    )
+        actadd_fwd_pre_hooks, actadd_fwd_hooks = (
+            [
+                (
+                    model_base.model_block_modules[layer],
+                    get_activation_addition_input_pre_hook(
+                        vector=refusal_direction, coeff=-1.0
+                    ),
+                )
+            ],
+            [],
+        )
 
-    # 5. Evaluate loss on harmless datasets
-    evaluate_loss_for_datasets(
-        cfg, model_base, baseline_fwd_pre_hooks, baseline_fwd_hooks, "baseline"
-    )
-    evaluate_loss_for_datasets(
-        cfg, model_base, ablation_fwd_pre_hooks, ablation_fwd_hooks, "ablation"
-    )
-    evaluate_loss_for_datasets(
-        cfg, model_base, actadd_fwd_pre_hooks, actadd_fwd_hooks, "actadd"
-    )
+        generate_and_save_completions_for_dataset(
+            cfg,
+            model_base,
+            ablation_fwd_pre_hooks,
+            ablation_fwd_hooks,
+            f"ablation_{layer}",
+            harmful_dataset_name,
+            temperature,
+            harmful_test,
+        )
+        generate_and_save_completions_for_dataset(
+            cfg,
+            model_base,
+            actadd_fwd_pre_hooks,
+            actadd_fwd_hooks,
+            f"actadd_{layer}",
+            harmful_dataset_name,
+            temperature,
+            harmful_test,
+        )
 
+        # 4a. Generate and save completions on harmless evaluation dataset
+        actadd_refusal_pre_hooks, actadd_refusal_hooks = (
+            [
+                (
+                    model_base.model_block_modules[layer],
+                    get_activation_addition_input_pre_hook(
+                        vector=refusal_direction, coeff=+1.0
+                    ),
+                )
+            ],
+            [],
+        )
 
-# if __name__ == "__main__":
-#     args = parse_arguments()
-#     run_pipeline(model_path=args.model_path)
+        generate_and_save_completions_for_dataset(
+            cfg,
+            model_base,
+            actadd_refusal_pre_hooks,
+            actadd_refusal_hooks,
+            f"actadd_{layer}",
+            "harmless",
+            temperature,
+            dataset=harmless_test,
+        )
+
 
 if __name__ == "__main__":
     args = parse_arguments()
@@ -632,4 +615,5 @@ if __name__ == "__main__":
         model_path=args.model_path,
         refusal_direction=directions,
         activation_prompts=args.activation_prompts,
+        temperature=args.set_temperature,
     )

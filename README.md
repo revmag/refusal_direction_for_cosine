@@ -24,9 +24,9 @@ It will then set up a virtual environment and install the required packages.
 To reproduce the main results from the paper, run the following command:
 
 ```bash
-python3 -m pipeline.run_pipeline --model_path {model_path} --direction_file {refusal_direction_path} --activation_prompts
+python3 -m pipeline.run_pipeline --model_path {model_path} --direction_file {refusal_direction_path} --activation_prompts --set_temperature
 ```
-where `{model_path}` is the path to a HuggingFace model, and direction_file is the path of the golden refusal direction(JSON file), and put --activation_prompts if you want the activations for a particular  model on harmful dataset. For example, for Llama-3 8B Instruct, the model path would be `meta-llama/Meta-Llama-3-8B-Instruct`.
+where `{model_path}` is the path to a HuggingFace model, and direction_file is the path of the golden refusal direction(JSON file), and put --activation_prompts if you want the activations for a particular  model on harmful dataset, and --set_temperature for generations for a particular temperature. For example, for Llama-3 8B Instruct, the model path would be `meta-llama/Meta-Llama-3-8B-Instruct`.
 
 The pipeline performs the following steps:
 1. Extract candiate refusal directions
