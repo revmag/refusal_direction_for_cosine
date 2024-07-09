@@ -209,7 +209,7 @@ def plotting_refusal_with_activations(
     plt.figure(figsize=(10, 5))  # Set the figure size as needed
 
     # Plotting Average Dot Products
-    plt.plot(layers, average_dot_products, label="Average Dot Product", marker="o")
+    plt.plot(layers, average_dot_products, label="mean(similarity(A_i, R))", marker="o")
 
     # Plotting Resultant Dot Products
     plt.plot(layers, resultant_dot_products, label="similarity(mean(A_i), R)", marker="o")
