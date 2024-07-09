@@ -227,7 +227,7 @@ def plotting_refusal_with_activations(
 
 
 def computing_dot_product(
-    data_list,
+    layer_wise_activations,
     refusal_direction,
     average_dot_products,
     resultant_dot_products,
@@ -235,19 +235,19 @@ def computing_dot_product(
     layers,
     harmful_train,
 ):
-    data_list = [normalize_vector(data) for data in data_list]
+    layer_wise_activations = [normalize_vector(data) for data in layer_wise_activations]
 
     """Calculate and save dot products, then generate and save a DataFrame with results."""
     for i in range(layers):
         # Calculate average dot products
         dot_products = sum(
-            np.dot(data_list[j][i].cpu().numpy(), refusal_direction.cpu().numpy())
+            np.dot(layer_wise_activations[j][i].cpu().numpy(), refusal_direction.cpu().numpy())
             for j in range(len(harmful_train))
         ) / len(harmful_train)
         average_dot_products.append(dot_products)
 
         # Calculate resultant dot products
-        resultant_vector = sum(data_list[j][i] for j in range(len(harmful_train)))
+        resultant_vector = sum(layer_wise_activations[j][i] for j in range(len(harmful_train)))
         resultant_vector = normalize_vector(resultant_vector)
         dot_product = torch.dot(resultant_vector, refusal_direction)
         resultant_dot_products.append(dot_product)
@@ -294,7 +294,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
         os.makedirs(activations_dir)
 
     # for storing cos with refusal_direction
-    data_list = []
+    layer_wise_activations = []
 
     for i in range(len(harmful_train)):
         mean_activations = generate_activations_for_harmful(
@@ -304,7 +304,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
         file_path = os.path.join(activations_dir, f"mean_activations_for_{i}_prompt.pt")
 
         # mean activations has a size of 5*18*d_model -> it takes activations of last 5 positions of prompt
-        data_list.append(mean_activations[-1, :, :])
+        layer_wise_activations.append(mean_activations[-1, :, :])
         torch.save(mean_activations, file_path)
 
     refusal_direction = normalize_vector(refusal_direction)
@@ -313,7 +313,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
     layers = model_base.model.config.num_hidden_layers
 
     average_dot_products, resultant_dot_products = computing_dot_product(
-        data_list,
+        layer_wise_activations,
         refusal_direction,
         average_dot_products,
         resultant_dot_products,
