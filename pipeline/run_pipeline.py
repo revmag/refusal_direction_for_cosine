@@ -249,9 +249,7 @@ def computing_dot_product(
         # Calculate resultant dot products
         resultant_vector = sum(data_list[j][i] for j in range(len(harmful_train)))
         resultant_vector = normalize_vector(resultant_vector)
-        dot_product = np.dot(
-            resultant_vector.cpu().numpy(), refusal_direction.cpu().numpy()
-        )
+        dot_product = torch.dot(resultant_vector, refusal_direction)
         resultant_dot_products.append(dot_product)
 
     print("Average Dot Products:", average_dot_products)
