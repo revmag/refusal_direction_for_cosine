@@ -196,7 +196,7 @@ def generate_and_save_candidate_directions(
 
 def normalize_vector(vector):
     """Normalize a given vector to have unit length."""
-    norm = torch.norm(vector)
+    norm = torch.linalg.vector_norm(vector)
     if norm == 0:
         return vector
     return vector / norm
