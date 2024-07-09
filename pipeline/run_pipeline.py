@@ -260,7 +260,7 @@ def computing_dot_product(
     # Create and display a DataFrame with results
     data = {
         "Layer": list(range(layers)),
-        "Sum along cos(A_i, R)": average_dot_products,
+        "mean(cos(A_i, R))": average_dot_products,
         "Cos(resultant(A_i), R)": resultant_dot_products,
     }
     df = pd.DataFrame(data)
