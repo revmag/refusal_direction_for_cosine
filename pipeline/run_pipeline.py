@@ -302,7 +302,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
             harmful_train[i],
         )
         file_path = os.path.join(activations_dir, f"mean_activations_for_{i}_prompt.pt")
-
+        assert mean_activations.shape == (5, model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
         # mean activations has a size of 5*18*d_model -> it takes activations of last 5 positions of prompt
         layer_wise_activations.append(mean_activations[-1, :, :])
         torch.save(mean_activations, file_path)
