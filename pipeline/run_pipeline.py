@@ -306,7 +306,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
         file_path = os.path.join(activations_dir, f"mean_activations_for_{i}_prompt.pt")
 
         # mean activations has a size of 5*18*d_model -> it takes activations of last 5 positions of prompt
-        data_list.append(mean_activations[4, :, :])
+        data_list.append(mean_activations[-1, :, :])
         torch.save(mean_activations, file_path)
 
     refusal_direction = normalize_vector(refusal_direction)
