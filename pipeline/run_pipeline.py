@@ -6,6 +6,8 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from typing import List
+
 
 from dataset.load_dataset import load_dataset_split, load_dataset
 
