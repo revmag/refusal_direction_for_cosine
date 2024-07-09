@@ -196,10 +196,16 @@ def generate_and_save_candidate_directions(
     return mean_diffs
 
 
-def normalize_vector(vector):
+def normalize_vector(vector,model_base):
     """Normalize a given vector to have unit length."""
-    norm = torch.linalg.vector_norm(vector)
-    if torch.isclose(norm, torch.tensor(0.,dtype=norm.dtype, device=norm.device)):
+    if vector.dim() > 1:
+        assert vector.shape == (model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size), "Shape doesnt match"
+        norm = torch.linalg.vector_norm(vector, dim=-1, keepdim=True)
+    else:
+        assert vector.shape == (model_base.model.config.hidden_size,), "Shape of the 1D vector does not match expected (x,)"
+        norm = torch.linalg.vector_norm(vector, dim=0, keepdim=True)
+   
+    if torch.isclose(norm, torch.tensor(0.,dtype=norm.dtype, device=norm.device)).any():
         return vector
     return vector / norm
 
@@ -238,7 +244,7 @@ def computing_dot_product(
     layers: int, 
     harmful_train: List[torch.Tensor]
 ) -> None:
-    layer_wise_activations = [normalize_vector(data) for data in layer_wise_activations]
+    layer_wise_activations = [normalize_vector(data,model_base) for data in layer_wise_activations]
 
     #layer_wise_activations is list, converting it to tensors for matching shape
     layer_wise_activations_tensor = torch.stack(layer_wise_activations)
@@ -254,7 +260,7 @@ def computing_dot_product(
 
         # Calculate resultant dot products
         resultant_vector = torch.sum(torch.stack([layer_wise_activations[j][i] for j in range(len(harmful_train))]), dim=0)
-        resultant_vector = normalize_vector(resultant_vector)
+        resultant_vector = normalize_vector(resultant_vector,model_base)
         dot_product = torch.dot(resultant_vector, refusal_direction)
         resultant_dot_products.append(dot_product)
 
@@ -313,7 +319,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
         layer_wise_activations.append(mean_activations[-1, :, :])
         torch.save(mean_activations, file_path)
 
-    refusal_direction = normalize_vector(refusal_direction)
+    refusal_direction = normalize_vector(refusal_direction,model_base)
     average_dot_products = []
     resultant_dot_products = []
     layers = model_base.model.config.num_hidden_layers
