@@ -240,14 +240,12 @@ def computing_dot_product(
     """Calculate and save dot products, then generate and save a DataFrame with results."""
     for i in range(layers):
         # Calculate average dot products
-        dot_products = sum(
-            np.dot(layer_wise_activations[j][i].cpu().numpy(), refusal_direction.cpu().numpy())
-            for j in range(len(harmful_train))
-        ) / len(harmful_train)
+        dot_products = torch.sum(torch.stack([torch.dot(data_list[j][i], refusal_direction) for j in range(len(harmful_train))])) / len(harmful_train)
+
         average_dot_products.append(dot_products)
 
         # Calculate resultant dot products
-        resultant_vector = sum(layer_wise_activations[j][i] for j in range(len(harmful_train)))
+        resultant_vector = torch.sum(torch.stack([layer_wise_activations[j][i] for j in range(len(harmful_train))]), dim=0)
         resultant_vector = normalize_vector(resultant_vector)
         dot_product = torch.dot(resultant_vector, refusal_direction)
         resultant_dot_products.append(dot_product)
