@@ -197,7 +197,7 @@ def generate_and_save_candidate_directions(
 def normalize_vector(vector):
     """Normalize a given vector to have unit length."""
     norm = torch.linalg.vector_norm(vector)
-    if th.isclose(norm, th.tensor(0.)):
+    if torch.isclose(norm, torch.tensor(0.)):
         return vector
     return vector / norm
 
