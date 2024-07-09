@@ -229,6 +229,7 @@ def plotting_refusal_with_activations(
 
 
 def computing_dot_product(
+    model_base,
     layer_wise_activations: List[torch.Tensor],
     refusal_direction: torch.Tensor,
     average_dot_products: List[torch.Tensor],
@@ -238,6 +239,8 @@ def computing_dot_product(
     harmful_train: List[torch.Tensor]
 ) -> None:
     layer_wise_activations = [normalize_vector(data) for data in layer_wise_activations]
+    assert layer_wise_activations.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
+    
     device=refusal_direction.device
     """Calculate and save dot products, then generate and save a DataFrame with results."""
     for i in range(layers):
@@ -313,6 +316,7 @@ def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direct
     layers = model_base.model.config.num_hidden_layers
 
     average_dot_products, resultant_dot_products = computing_dot_product(
+        model_base,
         layer_wise_activations,
         refusal_direction,
         average_dot_products,
