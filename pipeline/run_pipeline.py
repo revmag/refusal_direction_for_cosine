@@ -239,8 +239,11 @@ def computing_dot_product(
     harmful_train: List[torch.Tensor]
 ) -> None:
     layer_wise_activations = [normalize_vector(data) for data in layer_wise_activations]
-    assert layer_wise_activations.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
-    
+
+    #layer_wise_activations is list, converting it to tensors for matching shape
+    layer_wise_activations_tensor = torch.stack(layer_wise_activations)
+    assert layer_wise_activations_tensor.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
+        
     device=refusal_direction.device
     """Calculate and save dot products, then generate and save a DataFrame with results."""
     for i in range(layers):
