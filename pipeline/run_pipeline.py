@@ -502,7 +502,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
         cfg, model_base, harmful_train, harmless_train
     )
     # 2. Select the most effective refusal direction
-        pos, layer, direction = select_and_save_direction(
+        pos, layer, refusal_direction = select_and_save_direction(
             cfg, model_base, harmful_val, harmless_val, candidate_directions
         )
 
@@ -540,7 +540,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     for layer in range(model_base.model.config.num_hidden_layers):
         ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
-            model_base, direction
+            model_base, refusal_direction
         )
 
         actadd_fwd_pre_hooks, actadd_fwd_hooks = (
