@@ -384,11 +384,6 @@ def for_refusal_metric_plots(
         artifact_dir=os.path.join(cfg.artifact_path(), "select_direction"),
     )
 
-    with open(f"{cfg.artifact_path()}/direction_metadata.json", "w") as f:
-        json.dump({"pos": pos, "layer": layer}, f, indent=4)
-
-    torch.save(direction, f"{cfg.artifact_path()}/direction.pt")
-
 def generate_and_save_completions_for_dataset(
     cfg,
     model_base,
