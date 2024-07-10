@@ -175,7 +175,7 @@ def filter_fn(
     return False
 
 
-def select_direction_2(
+def refusal_metric_plot(
     model_base: ModelBase,
     harmful_instructions,
     harmless_instructions,
@@ -190,7 +190,7 @@ def select_direction_2(
         os.makedirs(artifact_dir)
 
     d_model = candidate_directions.shape
-    n_layer = 18
+    n_layer = model_base.model.config.num_hidden_layers
 
     direction_to_add = candidate_directions
 
@@ -397,9 +397,6 @@ def select_direction_2(
 
     with open(f"{artifact_dir}/direction_evaluations.json", "w") as f:
         json.dump(json_output_all_scores, f, indent=4)
-
-    return -2, 10, direction_to_add
-
 
 def select_direction(
     model_base: ModelBase,
