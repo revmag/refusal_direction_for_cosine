@@ -492,11 +492,6 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
         cfg
     )
 
-    # Filter datasets based on refusal scores
-    harmful_train, harmless_train, harmful_val, harmless_val = filter_data(
-        cfg, model_base, harmful_train, harmless_train, harmful_val, harmless_val
-    )
-
     if refusal_direction is not None:
         for_refusal_metric_plots(
             cfg, model_base, harmful_val, harmless_val, refusal_direction
@@ -530,7 +525,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     harmless_test = random.sample(
         load_dataset_split(harmtype="harmless", split="test"),
-        cfg.n_train_for_activations,
+        cfg.n_train,
     )
     generate_and_save_completions_for_dataset(
         cfg,
