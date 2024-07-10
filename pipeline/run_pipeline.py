@@ -510,7 +510,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     harmful_dataset_name = cfg.evaluation_datasets[0]
 
     harmful_test = random.sample(
-        load_dataset(harmful_dataset_name), cfg.n_train
+        load_dataset(harmful_dataset_name), cfg.n_test
     )
     generate_and_save_completions_for_dataset(
         cfg,
@@ -525,7 +525,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     harmless_test = random.sample(
         load_dataset_split(harmtype="harmless", split="test"),
-        cfg.n_train,
+        cfg.n_test,
     )
     generate_and_save_completions_for_dataset(
         cfg,
