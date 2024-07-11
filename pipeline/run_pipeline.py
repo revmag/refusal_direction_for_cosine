@@ -213,9 +213,9 @@ def normalize_vector(vector,model_base):
         assert vector.shape == (model_base.model.config.hidden_size,), "Shape of the 1D vector does not match expected (x,)"
         norm = torch.linalg.vector_norm(vector, dim=0, keepdim=True)
    
-    if torch.isclose(norm, torch.tensor(0.,dtype=norm.dtype, device=norm.device)).any():
-        return vector
-    return vector / norm
+    # if torch.isclose(norm, torch.tensor(0.,dtype=norm.dtype, device=norm.device)).any():
+    #     return vector
+    return vector / (norm +1e-6)
 
 
 def plotting_refusal_with_activations(
