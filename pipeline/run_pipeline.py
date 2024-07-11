@@ -205,10 +205,11 @@ def generate_and_save_candidate_directions(
 
 def normalize_vector(vector,model_base):
     """Normalize a given vector to have unit length."""
+    # if dim>1, so we normalize the multi-dimensional tensor input along the last dimension
     if vector.dim() > 1:
-        assert vector.shape == (model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size), "Shape doesnt match"
         norm = torch.linalg.vector_norm(vector, dim=-1, keepdim=True)
     else:
+        # if its single-dimensional tensor, we just take the norm
         assert vector.shape == (model_base.model.config.hidden_size,), "Shape of the 1D vector does not match expected (x,)"
         norm = torch.linalg.vector_norm(vector, dim=0, keepdim=True)
    
