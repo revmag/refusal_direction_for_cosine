@@ -370,21 +370,6 @@ def select_and_save_direction(
     return pos, layer, direction
 
 
-def for_refusal_metric_plots(
-    cfg, model_base, harmful_val, harmless_val, candidate_directions
-):
-    """Select and save the direction."""
-    if not os.path.exists(os.path.join(cfg.artifact_path(), "select_direction")):
-        os.makedirs(os.path.join(cfg.artifact_path(), "select_direction"))
-
-    refusal_metric_plot(
-        model_base,
-        harmful_val,
-        harmless_val,
-        candidate_directions,
-        artifact_dir=os.path.join(cfg.artifact_path(), "select_direction"),
-    )
-
 def generate_and_save_completions_for_dataset(
     cfg,
     model_base,
@@ -494,7 +479,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     )
 
     if refusal_direction is not None:
-        for_refusal_metric_plots(
+        refusal_metric_plot(
             cfg, model_base, harmful_val, harmless_val, refusal_direction
         )
     else:

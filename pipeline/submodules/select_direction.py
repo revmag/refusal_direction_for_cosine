@@ -176,16 +176,20 @@ def filter_fn(
 
 
 def refusal_metric_plot(
+    cfg,
     model_base: ModelBase,
     harmful_instructions,
     harmless_instructions,
     candidate_directions: Float[Tensor, " d_model"],
-    artifact_dir,
     kl_threshold=0.1,  # directions larger KL score are filtered out
     induce_refusal_threshold=0.0,  # directions with a lower inducing refusal score are filtered out
     prune_layer_percentage=0.2,  # discard the directions extracted from the last 20% of the model
     batch_size=32,
 ):
+    if not os.path.exists(os.path.join(cfg.artifact_path(), "select_direction")):
+    os.makedirs(os.path.join(cfg.artifact_path(), "select_direction"))
+    artifact_dir=os.path.join(cfg.artifact_path(), "select_direction")
+
     if not os.path.exists(artifact_dir):
         os.makedirs(artifact_dir)
 
