@@ -526,7 +526,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     for layer in range(model_base.model.config.num_hidden_layers):
         ablation_fwd_pre_hooks, ablation_fwd_hooks = get_all_direction_ablation_hooks(
-            model_base, refusal_direction
+            model_base, refusal_direction,layer
         )
 
         actadd_fwd_pre_hooks, actadd_fwd_hooks = (
