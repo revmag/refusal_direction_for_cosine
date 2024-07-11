@@ -253,24 +253,24 @@ def computing_dot_product(
     harmful_train: List[torch.Tensor]
 ) -> None:
 
+    layer_wise_activations = [normalize_vector(data,model_base) for data in layer_wise_activations]
     device=refusal_direction.device
     #layer_wise_activations is list, converting it to tensors for matching shape
     layer_wise_activations_tensor = torch.stack(layer_wise_activations).to(device)
     assert layer_wise_activations_tensor.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
-    normalize_vector(layer_wise_activations_tensor)
 
     #Getting mean(cos(A_i, R))
     average_dot_products = torch.matmul(layer_wise_activations_tensor, refusal_direction)  # Shape: [samples, n_layer]
     assert average_dot_products.shape == (len(harmful_train),model_base.model.config.num_hidden_layers)
-    average_dot_products = dot_products.mean(dim=0) 
+    average_dot_products = average_dot_products.mean(dim=0) 
     average_dot_products=average_dot_products.tolist()
 
     #getting cos(mean(A_i), R)
-    resultant_vectors = layer_wise_activations_tensor.sum(dim=0) # shape n_layers, d_model
-    normalize_vector(resultant_vectors)
-    assert average_dot_products.shape == (model_base.model.config.num_hidden_layers,model_base.model.config.hidden_size)
-    resultant_vectors = torch.matmul(resultant_vectors, refusal_direction)
-    resultant_vectors= resultant_vectors.tolist()
+    resultant_vectors = layer_wise_activations_tensor.mean(dim=0) # shape n_layers, d_model
+    normalize_vector(resultant_vectors,model_base)
+    assert resultant_vectors.shape == (model_base.model.config.num_hidden_layers,model_base.model.config.hidden_size)
+    resultant_dot_products = torch.matmul(resultant_vectors, refusal_direction)
+    resultant_dot_products= resultant_dot_products.tolist()
 
     # Create and display a DataFrame with results
     data = {

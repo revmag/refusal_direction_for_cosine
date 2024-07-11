@@ -187,7 +187,8 @@ def refusal_metric_plot(
     batch_size=32,
 ):
     if not os.path.exists(os.path.join(cfg.artifact_path(), "select_direction")):
-    os.makedirs(os.path.join(cfg.artifact_path(), "select_direction"))
+        os.makedirs(os.path.join(cfg.artifact_path(), "select_direction"))
+    
     artifact_dir=os.path.join(cfg.artifact_path(), "select_direction")
 
     if not os.path.exists(artifact_dir):
