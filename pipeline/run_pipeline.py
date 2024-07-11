@@ -254,11 +254,25 @@ def computing_dot_product(
 ) -> None:
     layer_wise_activations = [normalize_vector(data,model_base) for data in layer_wise_activations]
 
-    #layer_wise_activations is list, converting it to tensors for matching shape
-    layer_wise_activations_tensor = torch.stack(layer_wise_activations)
-    assert layer_wise_activations_tensor.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
-        
     device=refusal_direction.device
+    #layer_wise_activations is list, converting it to tensors for matching shape
+    layer_wise_activations_tensor = torch.stack(layer_wise_activations).to(device)
+    assert layer_wise_activations_tensor.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
+    
+    # average_dot_products_tensor = torch.einsum('ijl,l->ij', layer_wise_activations_tensor, refusal_direction).mean(dim=0)
+    # average_dot_products = average_dot_products_tensor.tolist()
+    
+    # resultant_vectors = layer_wise_activations_tensor.sum(dim=0)
+
+
+    # normalized_resultant_vectors = torch.zeros_like(resultant_vectors)
+    # for i in range(resultant_vectors.shape[0]):
+    #     normalized_resultant_vectors[i] = normalize_vector(resultant_vectors[i], model_base)
+
+
+    # resultant_dot_products_tensor = torch.einsum('ij,j->i', normalized_resultant_vectors, refusal_direction)
+    # resultant_dot_products = resultant_dot_products_tensor.tolist()
+
     """Calculate and save dot products, then generate and save a DataFrame with results."""
     for i in range(layers):
         # Calculate average dot products
