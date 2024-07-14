@@ -463,11 +463,25 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     model_base = construct_model_base(cfg.model_path)
 
     # To get activations of each layer
+    # if activation_prompts:
+    #     harmful_train, harmless_train, harmful_val, harmless_val = (
+    #         load_and_sample_datasets_for_activations(cfg)
+    #     )
+    #     generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction)
+    #     print("Loaded activations for each layer")
+
     if activation_prompts:
-        harmful_train, harmless_train, harmful_val, harmless_val = (
-            load_and_sample_datasets_for_activations(cfg)
-        )
-        generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction)
+        harmful_instructions = load_dataset('harmbench_test', instructions_only=True) + load_dataset('jailbreakbench', instructions_only=True)
+        harmful_refusal_scores = get_refusal_scores(model_base.model,harmful_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks,)     
+        print(len(harmful_instructions))
+        for idx, score in enumerate(harmful_refusal_scores):
+            print(f"Score {idx}: {score.item()}")
+        harmful_instructions = [
+        inst for inst, refusal_scores in zip(harmful_instructions, harmful_refusal_scores.tolist())
+        if refusal_scores > 0 ]
+        print(len(harmful_instructions))
+        harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
+        generate_and_save_activations(cfg, model_base, harmful_instructions, refusal_direction)
         print("Loaded activations for each layer")
 
     # Load and sample datasets
