@@ -441,7 +441,7 @@ def saving_plots(
 
     print("Data saved successfully.")
     print(df)
-
+    layers=range(layers)
     plt.figure(figsize=(10, 5))  # Set the figure size as needed
 
     # Plotting Average Dot Products
@@ -489,6 +489,8 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     refusal_direction = refusal_direction.to('cuda').float() 
     resultant_harmful_base_cosim = torch.mv(resultant_harmful_base_cosim,refusal_direction)
     print(resultant_harmful_base_cosim)
+    average_harmful_base_cosim = average_harmful_base_cosim.tolist()
+    resultant_harmful_base_cosim = resultant_harmful_base_cosim.tolist()
 
     activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
 
