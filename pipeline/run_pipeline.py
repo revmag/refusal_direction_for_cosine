@@ -496,8 +496,8 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     if not os.path.exists(activations_dir):
         os.makedirs(activations_dir)
 
-    average_harmful_base_cosim , resultant_harmful_base_cosim = saving_plots(
-    resultant_harmful_base_cosim,
+    saving_plots(
+    average_harmful_base_cosim,
     resultant_harmful_base_cosim,
     activations_dir,
     model_base.model.config.num_hidden_layers,
