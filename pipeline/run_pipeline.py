@@ -82,7 +82,7 @@ def get_cosim_pre_hook(layer, cache: Float[Tensor, "pos layer d_model"], positio
 def get_cosim_pre_hook_resultant(layer, cache: Float[Tensor, "pos layer d_model"], positions: List[int], direction, batch_slice: slice):
     def hook_fn(module, input):
         activation: Float[Tensor, "batch_size seq_len d_model"] = input[0].clone().to(cache.device).float()
-        cache[batch_slice, :, layer] =  activation[:, positions, :] / (activation[:, positions, :].norm(dim=-1, keepdim=True) + 1e-6)
+        cache[batch_slice,layer,:] =  activation[:, positions, :] / (activation[:, positions, :].norm(dim=-1, keepdim=True) + 1e-6)
 
     return hook_fn
 
@@ -118,7 +118,7 @@ def get_cosim_resultant(model, tokenizer, instructions, tokenize_instructions_fn
     n_samples = len(instructions)
     d_model = model.config.hidden_size
 
-    cosim_results = torch.zeros((len(instructions), n_positions, n_layers), dtype=torch.float, device=model.device)
+    cosim_results = torch.zeros((len(instructions), n_layers,d_model), dtype=torch.float, device=model.device)
     direction=direction.to(model.device).float()
     for i in tqdm(range(0, len(instructions), batch_size)):
         inputs = tokenize_instructions_fn(instructions=instructions[i:i+batch_size])
@@ -409,6 +409,58 @@ def evaluate_loss_for_datasets(
     ) as f:
         json.dump(loss_evals, f, indent=4)
 
+def saving_plots(
+    average_dot_products: List[torch.Tensor],
+    resultant_dot_products: List[torch.Tensor],
+    activations_dir: str, 
+    layers: int, 
+) -> None:
+
+    data = {
+        "Layer": list(range(layers)),
+        "mean(cos(A_i, R))": average_dot_products,
+        "cos(mean(A_i), R)": resultant_dot_products,
+    }
+    df = pd.DataFrame(data)
+
+    # Save average_dot_products
+    average_activation_file_path = os.path.join(
+        activations_dir, "average_dot_products.npy"
+    )
+    np.save(average_activation_file_path, average_dot_products)
+
+    # Save resultant_dot_products
+    resultant_activation_file_path = os.path.join(
+        activations_dir, "resultant_dot_products.npy"
+    )
+    np.save(resultant_activation_file_path, resultant_dot_products)
+
+    # Save DataFrame as CSV
+    df_file_path = os.path.join(activations_dir, "cosine_similarity_results.csv")
+    df.to_csv(df_file_path, index=False)
+
+    print("Data saved successfully.")
+    print(df)
+
+    plt.figure(figsize=(10, 5))  # Set the figure size as needed
+
+    # Plotting Average Dot Products
+    plt.plot(layers, average_dot_products, label="mean(similarity(A_i, R))", marker="o")
+
+    # Plotting Resultant Dot Products
+    plt.plot(layers, resultant_dot_products, label="similarity(mean(A_i), R)", marker="o")
+
+    plt.title("Dot Products Comparison Across Layers")  # Title of the plot
+    plt.xlabel("Layer Number")  # Label for the x-axis
+    plt.ylabel("Dot Product Value")  # Label for the y-axis
+    plt.xticks(layers)  # Ensure all layer numbers are marked
+    plt.legend()
+
+    plot_file_path = os.path.join(activations_dir, "dot_products_plot.png")
+    plt.savefig(plot_file_path)
+    plt.close()
+    print(f"Plot saved to {plot_file_path}")
+
 
 def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,temperature=1.0):
     """Run the full pipeline."""
@@ -430,24 +482,27 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     average_harmful_base_cosim = average_harmful_base_cosim[:,-1,:].mean(dim=0)
     print(average_harmful_base_cosim)
 
-
     resultant_harmful_base_cosim = get_cosim_resultant(model_base.model, tokenizer, harmful_instructions_n, tokenize_instructions_fn=base_tokenize_instructions_fn, block_modules=model_base.model_block_modules, direction=refusal_direction, positions=base_positions)
-    resultant_harmful_base_cosim = resultant_harmful_base_cosim[:,-1,:].mean(dim=0)
+    resultant_harmful_base_cosim = resultant_harmful_base_cosim[:,:,:].mean(dim=0)
     resultant_harmful_base_cosim= resultant_harmful_base_cosim/( resultant_harmful_base_cosim.norm(dim=-1, keepdim=True) + 1e-6 )
-    resultant_harmful_base_cosim = torch.dot(resultant_harmful_base_cosim,refusal_direction)
+    resultant_harmful_base_cosim = resultant_harmful_base_cosim.to('cuda').float()  # Example: move to GPU and ensure float32
+    refusal_direction = refusal_direction.to('cuda').float() 
+    resultant_harmful_base_cosim = torch.mv(resultant_harmful_base_cosim,refusal_direction)
     print(resultant_harmful_base_cosim)
 
+    activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
 
+    # Create the directory if it doesn't exist
+    if not os.path.exists(activations_dir):
+        os.makedirs(activations_dir)
 
-
-
-
-
-
-
-
-
-
+    average_harmful_base_cosim , resultant_harmful_base_cosim = saving_plots(
+    resultant_harmful_base_cosim,
+    resultant_harmful_base_cosim,
+    activations_dir,
+    model_base.model.config.num_hidden_layers,
+    )
+ 
 
     # Load and sample datasets
     harmful_train, harmless_train, harmful_val, harmless_val = load_and_sample_datasets(
