@@ -462,14 +462,7 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     model_base = construct_model_base(cfg.model_path)
 
-    # To get activations of each layer
-    # if activation_prompts:
-    #     harmful_train, harmless_train, harmful_val, harmless_val = (
-    #         load_and_sample_datasets_for_activations(cfg)
-    #     )
-    #     generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction)
-    #     print("Loaded activations for each layer")
-
+  #To calculate for fine tuned models
     if activation_prompts:
         harmful_instructions = load_dataset('harmbench_test', instructions_only=True) + load_dataset('jailbreakbench', instructions_only=True)
         harmful_refusal_scores = get_refusal_scores(model_base.model,harmful_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks,)     
@@ -483,6 +476,14 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
         harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
         generate_and_save_activations(cfg, model_base, harmful_instructions, refusal_direction)
         print("Loaded activations for each layer")
+
+    else:
+        #to calculate for base models
+        harmful_instructions = load_dataset('harmful_instructions', instructions_only=True) 
+        harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
+        generate_and_save_activations(cfg, model_base, harmful_instructions, refusal_direction)
+        print("Loaded activations for each layer")
+
 
     # Load and sample datasets
     harmful_train, harmless_train, harmful_val, harmless_val = load_and_sample_datasets(
