@@ -7,6 +7,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List
+from tqdm import tqdm
+import functools
+from pipeline.utils.hook_utils import add_hooks
+from torch import Tensor
+from jaxtyping import Float, Int
+from typing import List, Tuple
+import einops
 
 
 from dataset.load_dataset import load_dataset_split, load_dataset
@@ -61,6 +68,80 @@ def parse_arguments():
     )
 
     return parser.parse_args()
+
+def get_cosim_pre_hook(layer, cache: Float[Tensor, "pos layer d_model"], positions: List[int], direction, batch_slice: slice):
+    def hook_fn(module, input):
+        activation: Float[Tensor, "batch_size seq_len d_model"] = input[0].clone().to(cache.device).float()
+        cache[batch_slice, :, layer] = einops.einsum(
+            activation[:, positions, :] / (activation[:, positions, :].norm(dim=-1, keepdim=True) + 1e-6),
+            direction,
+            "batch_size pos d_model, d_model -> batch_size pos"
+        )
+    return hook_fn
+
+def get_cosim_pre_hook_resultant(layer, cache: Float[Tensor, "pos layer d_model"], positions: List[int], direction, batch_slice: slice):
+    def hook_fn(module, input):
+        activation: Float[Tensor, "batch_size seq_len d_model"] = input[0].clone().to(cache.device).float()
+        cache[batch_slice, :, layer] =  activation[:, positions, :] / (activation[:, positions, :].norm(dim=-1, keepdim=True) + 1e-6)
+
+    return hook_fn
+
+def get_cosim(model, tokenizer, instructions, tokenize_instructions_fn, block_modules: List[torch.nn.Module], direction: Float[Tensor, "d_model"], batch_size=1, positions=[-1]):
+    torch.cuda.empty_cache()
+
+    n_positions = len(positions)
+    n_layers = model.config.num_hidden_layers
+    n_samples = len(instructions)
+    d_model = model.config.hidden_size
+
+    cosim_results = torch.zeros((len(instructions), n_positions, n_layers), dtype=torch.float, device=model.device)
+    direction=direction.to(model.device).float()
+    for i in tqdm(range(0, len(instructions), batch_size)):
+        inputs = tokenize_instructions_fn(instructions=instructions[i:i+batch_size])
+
+        batch_slice = slice(i, min(i+batch_size, len(instructions)))
+        fwd_pre_hooks = [(block_modules[layer], get_cosim_pre_hook(layer=layer, cache=cosim_results, positions=positions,  direction=direction, batch_slice=batch_slice)) for layer in range(n_layers)]
+
+        with add_hooks(module_forward_pre_hooks=fwd_pre_hooks, module_forward_hooks=[]):
+            model(
+                input_ids=inputs.input_ids.to(model.device),
+                attention_mask=inputs.attention_mask.to(model.device),
+            )
+
+    return cosim_results
+
+def get_cosim_resultant(model, tokenizer, instructions, tokenize_instructions_fn, block_modules: List[torch.nn.Module], direction: Float[Tensor, "d_model"], batch_size=1, positions=[-1]):
+    torch.cuda.empty_cache()
+
+    n_positions = len(positions)
+    n_layers = model.config.num_hidden_layers
+    n_samples = len(instructions)
+    d_model = model.config.hidden_size
+
+    cosim_results = torch.zeros((len(instructions), n_positions, n_layers), dtype=torch.float, device=model.device)
+    direction=direction.to(model.device).float()
+    for i in tqdm(range(0, len(instructions), batch_size)):
+        inputs = tokenize_instructions_fn(instructions=instructions[i:i+batch_size])
+
+        batch_slice = slice(i, min(i+batch_size, len(instructions)))
+        fwd_pre_hooks = [(block_modules[layer], get_cosim_pre_hook_resultant(layer=layer, cache=cosim_results, positions=positions,  direction=direction, batch_slice=batch_slice)) for layer in range(n_layers)]
+
+        with add_hooks(module_forward_pre_hooks=fwd_pre_hooks, module_forward_hooks=[]):
+            model(
+                input_ids=inputs.input_ids.to(model.device),
+                attention_mask=inputs.attention_mask.to(model.device),
+            )
+
+    return cosim_results
+
+def base_tokenize(tokenizer, instructions) -> Tensor:
+    result = tokenizer(
+        instructions,
+        padding=True,
+        truncation=False,
+        return_tensors="pt",
+    )
+    return result
 
 
 def load_directions(file_path):
@@ -218,132 +299,6 @@ def normalize_vector(vector,model_base):
     return vector / (norm +1e-6)
 
 
-def plotting_refusal_with_activations(
-    layers, average_dot_products, resultant_dot_products, activations_dir
-):
-    layers=range(layers)
-    plt.figure(figsize=(10, 5))  # Set the figure size as needed
-
-    # Plotting Average Dot Products
-    plt.plot(layers, average_dot_products, label="mean(similarity(A_i, R))", marker="o")
-
-    # Plotting Resultant Dot Products
-    plt.plot(layers, resultant_dot_products, label="similarity(mean(A_i), R)", marker="o")
-
-    plt.title("Dot Products Comparison Across Layers")  # Title of the plot
-    plt.xlabel("Layer Number")  # Label for the x-axis
-    plt.ylabel("Dot Product Value")  # Label for the y-axis
-    plt.xticks(layers)  # Ensure all layer numbers are marked
-    plt.legend()
-
-    plot_file_path = os.path.join(activations_dir, "dot_products_plot.png")
-    plt.savefig(plot_file_path)
-    plt.close()
-    print(f"Plot saved to {plot_file_path}")
-
-
-def computing_dot_product(
-    model_base,
-    layer_wise_activations: List[torch.Tensor],
-    refusal_direction: torch.Tensor,
-    average_dot_products: List[torch.Tensor],
-    resultant_dot_products: List[torch.Tensor],
-    activations_dir: str, 
-    layers: int, 
-    harmful_train: List[torch.Tensor]
-) -> None:
-
-    layer_wise_activations = [normalize_vector(data,model_base) for data in layer_wise_activations]
-    device=refusal_direction.device
-    #layer_wise_activations is list, converting it to tensors for matching shape
-    layer_wise_activations_tensor = torch.stack(layer_wise_activations).to(device)
-    assert layer_wise_activations_tensor.shape == (len(harmful_train), model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
-
-    #Getting mean(cos(A_i, R))
-    average_dot_products = torch.matmul(layer_wise_activations_tensor, refusal_direction)  # Shape: [samples, n_layer]
-    assert average_dot_products.shape == (len(harmful_train),model_base.model.config.num_hidden_layers)
-    average_dot_products = average_dot_products.mean(dim=0) 
-    average_dot_products=average_dot_products.tolist()
-
-    #getting cos(mean(A_i), R)
-    resultant_vectors = layer_wise_activations_tensor.mean(dim=0) # shape n_layers, d_model
-    normalize_vector(resultant_vectors,model_base)
-    assert resultant_vectors.shape == (model_base.model.config.num_hidden_layers,model_base.model.config.hidden_size)
-    resultant_dot_products = torch.matmul(resultant_vectors, refusal_direction)
-    resultant_dot_products= resultant_dot_products.tolist()
-
-    # Create and display a DataFrame with results
-    data = {
-        "Layer": list(range(layers)),
-        "mean(cos(A_i, R))": average_dot_products,
-        "cos(mean(A_i), R)": resultant_dot_products,
-    }
-    df = pd.DataFrame(data)
-
-    # Save average_dot_products
-    average_activation_file_path = os.path.join(
-        activations_dir, "average_dot_products.npy"
-    )
-    np.save(average_activation_file_path, average_dot_products)
-
-    # Save resultant_dot_products
-    resultant_activation_file_path = os.path.join(
-        activations_dir, "resultant_dot_products.npy"
-    )
-    np.save(resultant_activation_file_path, resultant_dot_products)
-
-    # Save DataFrame as CSV
-    df_file_path = os.path.join(activations_dir, "cosine_similarity_results.csv")
-    df.to_csv(df_file_path, index=False)
-
-    print("Data saved successfully.")
-    print(df)
-
-    return average_dot_products, resultant_dot_products
-
-
-def generate_and_save_activations(cfg, model_base, harmful_train, refusal_direction):
-    """Generate and save candidate directions."""
-    activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
-
-    # Create the directory if it doesn't exist
-    if not os.path.exists(activations_dir):
-        os.makedirs(activations_dir)
-
-    # for storing cos with refusal_direction
-    layer_wise_activations = []
-
-    for i in range(len(harmful_train)):
-        mean_activations = generate_activations_for_harmful(
-            model_base,
-            harmful_train[i],
-        )
-        file_path = os.path.join(activations_dir, f"mean_activations_for_{i}_prompt.pt")
-        assert mean_activations.shape == (5, model_base.model.config.num_hidden_layers, model_base.model.config.hidden_size)
-        # mean activations has a size of 5*18*d_model -> it takes activations of last 5 positions of prompt
-        layer_wise_activations.append(mean_activations[-1, :, :])
-        torch.save(mean_activations, file_path)
-
-    refusal_direction = normalize_vector(refusal_direction,model_base)
-    average_dot_products = []
-    resultant_dot_products = []
-    layers = model_base.model.config.num_hidden_layers
-
-    average_dot_products, resultant_dot_products = computing_dot_product(
-        model_base,
-        layer_wise_activations,
-        refusal_direction,
-        average_dot_products,
-        resultant_dot_products,
-        activations_dir,
-        layers,
-        harmful_train,
-    )
-    plotting_refusal_with_activations(
-        layers, average_dot_products, resultant_dot_products, activations_dir
-    )
-
-
 def select_and_save_direction(
     cfg, model_base, harmful_val, harmless_val, candidate_directions
 ):
@@ -462,27 +417,36 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     model_base = construct_model_base(cfg.model_path)
 
-  #To calculate for fine tuned models
-    if activation_prompts:
-        harmful_instructions = load_dataset('harmbench_test', instructions_only=True) + load_dataset('jailbreakbench', instructions_only=True)
-        harmful_refusal_scores = get_refusal_scores(model_base.model,harmful_instructions, model_base.tokenize_instructions_fn, model_base.refusal_toks,)     
-        print(len(harmful_instructions))
-        for idx, score in enumerate(harmful_refusal_scores):
-            print(f"Score {idx}: {score.item()}")
-        harmful_instructions = [
-        inst for inst, refusal_scores in zip(harmful_instructions, harmful_refusal_scores.tolist())
-        if refusal_scores > 0 ]
-        print(len(harmful_instructions))
-        harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
-        generate_and_save_activations(cfg, model_base, harmful_instructions, refusal_direction)
-        print("Loaded activations for each layer")
+    harmful_instructions = load_dataset('harmful_instructions', instructions_only=True)
+    harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
+    harmful_instructions_n = [x + '\n' for x in harmful_instructions]
+    refusal_direction = refusal_direction / (refusal_direction.norm() + 1e-6)
+    tokenizer = model_base.tokenizer
+    chat_tokenize_instructions_fn = model_base.tokenize_instructions_fn
+    base_tokenize_instructions_fn = functools.partial(base_tokenize, tokenizer=model_base.tokenizer)
+    chat_positions = [-1]
+    base_positions = [-1]
+    average_harmful_base_cosim = get_cosim(model_base.model, tokenizer, harmful_instructions_n, tokenize_instructions_fn=base_tokenize_instructions_fn, block_modules=model_base.model_block_modules, direction=refusal_direction, positions=base_positions)
+    average_harmful_base_cosim = average_harmful_base_cosim[:,-1,:].mean(dim=0)
+    print(average_harmful_base_cosim)
 
-    else:
-        #to calculate for base models
-        harmful_instructions = load_dataset('harmful_instructions', instructions_only=True) 
-        harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
-        generate_and_save_activations(cfg, model_base, harmful_instructions, refusal_direction)
-        print("Loaded activations for each layer")
+
+    resultant_harmful_base_cosim = get_cosim_resultant(model_base.model, tokenizer, harmful_instructions_n, tokenize_instructions_fn=base_tokenize_instructions_fn, block_modules=model_base.model_block_modules, direction=refusal_direction, positions=base_positions)
+    resultant_harmful_base_cosim = resultant_harmful_base_cosim[:,-1,:].mean(dim=0)
+    resultant_harmful_base_cosim= resultant_harmful_base_cosim/( resultant_harmful_base_cosim.norm(dim=-1, keepdim=True) + 1e-6 )
+    resultant_harmful_base_cosim = torch.dot(resultant_harmful_base_cosim,refusal_direction)
+    print(resultant_harmful_base_cosim)
+
+
+
+
+
+
+
+
+
+
+
 
 
     # Load and sample datasets
