@@ -490,7 +490,8 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     print(average_harmful_base_cosim)
 
     resultant_harmful_base_cosim = get_cosim_resultant(model_base.model, tokenizer, harmful_instructions_n, tokenize_instructions_fn=base_tokenize_instructions_fn, block_modules=model_base.model_block_modules, direction=refusal_direction, positions=base_positions)
-    
+    # shape is len(instructions), n_layers, d_model
+    assert resultant_harmful_base_cosim.shape == (cfg.n_test,model_base.model.config.num_hidden_layers,model_base.model.config.hidden_size)
     average_activation_file_path = os.path.join(activations_dir, "activations.pt")
     torch.save(resultant_harmful_base_cosim, average_activation_file_path)
     print(f"3D vector saved at: {average_activation_file_path}")
