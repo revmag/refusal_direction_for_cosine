@@ -469,6 +469,13 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
 
     model_base = construct_model_base(cfg.model_path)
 
+    activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(activations_dir):
+        os.makedirs(activations_dir)
+
+
     harmful_instructions = load_dataset('harmful_instructions', instructions_only=True)
     harmful_instructions = random.sample(harmful_instructions, cfg.n_test)
     harmful_instructions_n = [x + '\n' for x in harmful_instructions]
@@ -483,6 +490,11 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     print(average_harmful_base_cosim)
 
     resultant_harmful_base_cosim = get_cosim_resultant(model_base.model, tokenizer, harmful_instructions_n, tokenize_instructions_fn=base_tokenize_instructions_fn, block_modules=model_base.model_block_modules, direction=refusal_direction, positions=base_positions)
+    
+    average_activation_file_path = os.path.join(activations_dir, "activations.pt")
+    torch.save(resultant_harmful_base_cosim, average_activation_file_path)
+    print(f"3D vector saved at: {average_activation_file_path}")
+        
     resultant_harmful_base_cosim = resultant_harmful_base_cosim[:,:,:].mean(dim=0)
     resultant_harmful_base_cosim= resultant_harmful_base_cosim/( resultant_harmful_base_cosim.norm(dim=-1, keepdim=True) + 1e-6 )
     resultant_harmful_base_cosim = resultant_harmful_base_cosim.to('cuda').float()  # Example: move to GPU and ensure float32
@@ -492,11 +504,6 @@ def run_pipeline(model_path, refusal_direction=None, activation_prompts=False,te
     average_harmful_base_cosim = average_harmful_base_cosim.tolist()
     resultant_harmful_base_cosim = resultant_harmful_base_cosim.tolist()
 
-    activations_dir = os.path.join(cfg.artifact_path(), "generate_activations")
-
-    # Create the directory if it doesn't exist
-    if not os.path.exists(activations_dir):
-        os.makedirs(activations_dir)
 
     saving_plots(
     average_harmful_base_cosim,
